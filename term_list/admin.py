@@ -44,7 +44,7 @@ from term_list.forms import (
     StatisticsFilterForm,
     SynonymInlineForm,
 )
-from term_list.functions import most_viewed_concepts
+from term_list.functions import most_viewed_concepts, most_viewed_dictionaries
 from term_list.models import (
     STATUS_CHOICES,
     Attribute,
@@ -323,16 +323,17 @@ class MetadataSearchTrackAdmin(admin.ModelAdmin):
         form = StatisticsFilterForm(
             request.GET or {"from_date": today - timedelta(days=30), "to_date": today}
         )
-        top_concepts = []
+        top_concepts = top_dictionaries = []
         if form.is_valid():
-            top_concepts = most_viewed_concepts(
-                form.cleaned_data["from_date"], form.cleaned_data["to_date"]
-            )
+            date_range = (form.cleaned_data["from_date"], form.cleaned_data["to_date"])
+            top_concepts = most_viewed_concepts(*date_range)
+            top_dictionaries = most_viewed_dictionaries(*date_range)
         context = {
             **self.admin_site.each_context(request),
             "title": "Användningsstatistik",
             "form": form,
             "top_concepts": top_concepts,
+            "top_dictionaries": top_dictionaries,
         }
         return TemplateResponse(request, "admin/usage_statistics.html", context)
 

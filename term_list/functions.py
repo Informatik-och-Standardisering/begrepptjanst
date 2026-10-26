@@ -1,9 +1,9 @@
 import re
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 
 from django.db.models import Count
 
-from .models import Concept, MetadataSearchTrack, SearchTrack
+from .models import Concept, Dictionary, MetadataSearchTrack, SearchTrack
 
 
 def besökare_ip_adress(request):
@@ -48,6 +48,22 @@ def most_viewed_concepts(from_date, to_date, limit=50):
         {'concept': concepts.get(row['sök_term']), 'concept_id': row['sök_term'], 'views': row['views']}
         for row in rows
     ]
+
+def most_viewed_dictionaries(from_date, to_date):
+    """Return dictionaries ordered by views of their concepts between two dates (inclusive)."""
+
+    view_counts = dict(
+        MetadataSearchTrack.objects.filter(sök_timestamp__date__range=(from_date, to_date))
+        .values_list('sök_term')
+        .annotate(views=Count('id'))
+    )
+    concept_ids = [concept_id for concept_id in view_counts if concept_id.isdecimal()]
+    memberships = Concept.dictionaries.through.objects.filter(concept_id__in=concept_ids)
+    totals = Counter()
+    for concept_id, dictionary_id in memberships.values_list('concept_id', 'dictionary_id'):
+        totals[dictionary_id] += view_counts[str(concept_id)]
+    dictionaries = Dictionary.objects.in_bulk(list(totals))
+    return [{'dictionary': dictionaries[pk], 'views': views} for pk, views in totals.most_common()]
 
 def sort_concept_keys(begrepp_dict):
 

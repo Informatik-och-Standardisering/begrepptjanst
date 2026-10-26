@@ -6,9 +6,9 @@ import pytest
 from django.contrib.auth.models import User
 from django.urls import reverse
 
-from term_list.functions import most_viewed_concepts
+from term_list.functions import most_viewed_concepts, most_viewed_dictionaries
 from term_list.models import MetadataSearchTrack
-from term_list.tests.factories import ConceptFactory
+from term_list.tests.factories import ConceptFactory, DictionaryFactory
 
 pytestmark = pytest.mark.django_db
 
@@ -40,6 +40,24 @@ class TestMostViewedConcepts:
         assert result == [{"concept": None, "concept_id": "999999", "views": 1}]
 
 
+class TestMostViewedDictionaries:
+    def test_concept_in_two_dictionaries_counts_for_both(self, concept, dictionary):
+        """Views of a concept count for every dictionary it belongs to."""
+        other_dictionary = DictionaryFactory()
+        concept.dictionaries.add(other_dictionary)
+        other_concept = ConceptFactory()
+        other_concept.dictionaries.add(other_dictionary)
+        log_view(concept.id, datetime(2026, 10, 1, 12, 0))
+        log_view(other_concept.id, datetime(2026, 10, 1, 12, 0))
+
+        result = most_viewed_dictionaries(date(2026, 10, 1), date(2026, 10, 1))
+
+        assert [(row["dictionary"], row["views"]) for row in result] == [
+            (other_dictionary, 2),
+            (dictionary, 1),
+        ]
+
+
 class TestStatisticsView:
     url = reverse("admin:term_list_metadatasearchtrack_statistics")
 
@@ -53,6 +71,18 @@ class TestStatisticsView:
 
         assert response.status_code == 200
         assert concept.term in response.content.decode()
+
+    def test_admin_sees_most_viewed_dictionaries(
+        self, admin_user_authenticated_client, concept, dictionary
+    ):
+        """The statistics page lists dictionaries of concepts viewed in the chosen range."""
+        log_view(concept.id, datetime(2026, 10, 1, 12, 0))
+
+        response = admin_user_authenticated_client.get(
+            self.url, {"from_date": "2026-10-01", "to_date": "2026-10-31"}
+        )
+
+        assert dictionary.dictionary_name in response.content.decode()
 
     def test_staff_without_view_permission_is_denied(self, client):
         """Staff who can't view Sök Metadata get a 403."""
