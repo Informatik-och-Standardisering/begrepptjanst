@@ -1,7 +1,9 @@
 import re
 from collections import OrderedDict
 
-from .models import MetadataSearchTrack, SearchTrack
+from django.db.models import Count
+
+from .models import Concept, MetadataSearchTrack, SearchTrack
 
 
 def besökare_ip_adress(request):
@@ -30,6 +32,22 @@ def mäta_förklaring_träff(sök_term, request):
     ny_sök.sök_term = sök_term
     ny_sök.ip_adress = besökare_ip_adress(request)
     ny_sök.save()
+
+def most_viewed_concepts(from_date, to_date, limit=50):
+    """Return the most viewed concepts between two dates (inclusive) with view counts."""
+
+    rows = (
+        MetadataSearchTrack.objects.filter(sök_timestamp__date__range=(from_date, to_date))
+        .values('sök_term')
+        .annotate(views=Count('id'))
+        .order_by('-views', 'sök_term')[:limit]
+    )
+    concept_ids = [row['sök_term'] for row in rows if row['sök_term'].isdecimal()]
+    concepts = {str(pk): concept for pk, concept in Concept.objects.in_bulk(concept_ids).items()}
+    return [
+        {'concept': concepts.get(row['sök_term']), 'concept_id': row['sök_term'], 'views': row['views']}
+        for row in rows
+    ]
 
 def sort_concept_keys(begrepp_dict):
 

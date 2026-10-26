@@ -1,14 +1,18 @@
 import json
 import logging
+from datetime import date, timedelta
 from typing import Any, ClassVar, Type, cast
 
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.admin.actions import delete_selected
 from django.contrib.admin.filters import RelatedFieldListFilter
+from django.core.exceptions import PermissionDenied
 from django.db.models import Case, F, IntegerField, Min, Q, Value, When
 from django.forms import ModelForm
 from django.http import HttpRequest, HttpResponseRedirect
+from django.template.response import TemplateResponse
+from django.urls import path
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 from django_admin_multiple_choice_list_filter.list_filters import (
@@ -37,8 +41,10 @@ from term_list.forms import (
     ConceptExternalFilesForm,
     ConceptForm,
     ConfigurationOptionsForm,
+    StatisticsFilterForm,
     SynonymInlineForm,
 )
+from term_list.functions import most_viewed_concepts
 from term_list.models import (
     STATUS_CHOICES,
     Attribute,
@@ -292,11 +298,54 @@ class ConceptCommentsAdmin(DictionaryRestrictedAdminMixin, admin.ModelAdmin):
 class MetadataSearchTrackAdmin(admin.ModelAdmin):
 
     list_display = ("sök_term", "ip_adress", "sök_timestamp")
+    change_list_template = "admin/metadatasearchtrack_changelist.html"
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def get_urls(self):
+        custom_urls = [
+            path(
+                "statistik/",
+                self.admin_site.admin_view(self.statistics_view),
+                name="term_list_metadatasearchtrack_statistics",
+            ),
+        ]
+        return custom_urls + super().get_urls()
+
+    def statistics_view(self, request):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+        today = date.today()
+        form = StatisticsFilterForm(
+            request.GET or {"from_date": today - timedelta(days=30), "to_date": today}
+        )
+        top_concepts = []
+        if form.is_valid():
+            top_concepts = most_viewed_concepts(
+                form.cleaned_data["from_date"], form.cleaned_data["to_date"]
+            )
+        context = {
+            **self.admin_site.each_context(request),
+            "title": "Användningsstatistik",
+            "form": form,
+            "top_concepts": top_concepts,
+        }
+        return TemplateResponse(request, "admin/usage_statistics.html", context)
 
 
 class SearchTrackAdmin(admin.ModelAdmin):
 
     list_display = ("sök_term", "ip_adress", "sök_timestamp", "records_returned")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 class ConceptExternalFilesAdmin(admin.ModelAdmin):

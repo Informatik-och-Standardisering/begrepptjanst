@@ -481,3 +481,16 @@ class ChooseExportAttributes(forms.Form):
 
     attribut = forms.MultipleChoiceField(required=False)
     term = forms.CharField(widget=forms.HiddenInput(), required=False)
+
+
+class StatisticsFilterForm(forms.Form):
+
+    from_date = forms.DateField(label="Från", widget=CustomDateInput(format="%Y-%m-%d"))
+    to_date = forms.DateField(label="Till", widget=CustomDateInput(format="%Y-%m-%d"))
+
+    def clean(self):
+        cleaned_data = super().clean()
+        from_date, to_date = cleaned_data.get("from_date"), cleaned_data.get("to_date")
+        if from_date and to_date and from_date > to_date:
+            raise ValidationError("Från-datum måste vara före till-datum.")
+        return cleaned_data
