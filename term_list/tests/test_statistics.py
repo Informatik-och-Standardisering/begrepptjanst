@@ -4,11 +4,14 @@ from datetime import date, datetime, timedelta
 
 import pytest
 from django.contrib.auth.models import User
+from django.db import connection
+from django.db.migrations.executor import MigrationExecutor
 from django.test import RequestFactory
 from django.urls import reverse
 
 from term_list.functions import (
     besökare_hash,
+    besökare_ip_adress,
     besökare_land,
     most_viewed_concepts,
     most_viewed_dictionaries,
@@ -24,7 +27,7 @@ pytestmark = pytest.mark.django_db
 
 def log_view(concept_id, timestamp, visitor_hash=None, country=None):
     track = MetadataSearchTrack.objects.create(
-        sök_term=str(concept_id), ip_adress="127.0.0.1", visitor_hash=visitor_hash, country=country
+        sök_term=str(concept_id), visitor_hash=visitor_hash, country=country
     )
     MetadataSearchTrack.objects.filter(pk=track.pk).update(sök_timestamp=timestamp)
 
@@ -61,6 +64,44 @@ class TestVisitorHash:
 
         track = MetadataSearchTrack.objects.get(sök_term=str(concept.id))
         assert len(track.visitor_hash) == 64
+
+
+class TestVisitorIp:
+    def test_prefers_first_x_forwarded_for_address(self):
+        """The visitor IP comes from the first X-Forwarded-For address when present, not REMOTE_ADDR."""
+        request = visitor_request(ip="10.0.0.1")
+        request.META["HTTP_X_FORWARDED_FOR"] = "203.0.113.9, 10.0.0.1"
+
+        assert besökare_ip_adress(request) == "203.0.113.9"
+
+
+class TestIpMigration:
+    migrate_from = [("term_list", "0008_metadatasearchtrack_country")]
+    migrate_to = [("term_list", "0009_fill_visitor_hash_and_country_from_ip")]
+    latest = [("term_list", "0010_remove_ip_adress")]
+
+    @pytest.mark.django_db(transaction=True)
+    def test_fills_country_and_daily_hash_from_ip(self):
+        """Old clicks get a country and a hash that matches within a day and differs across days."""
+        executor = MigrationExecutor(connection)
+        executor.migrate(self.migrate_from)
+        old_track = executor.loader.project_state(self.migrate_from).apps.get_model(
+            "term_list", "MetadataSearchTrack"
+        )
+        for day in (1, 1, 2):
+            track = old_track.objects.create(sök_term="1", ip_adress="195.67.0.1")
+            old_track.objects.filter(pk=track.pk).update(sök_timestamp=datetime(2026, 10, day, 12, 0))
+
+        executor = MigrationExecutor(connection)
+        executor.migrate(self.migrate_to)
+        tracks = list(
+            executor.loader.project_state(self.migrate_to).apps.get_model("term_list", "MetadataSearchTrack")
+            .objects.order_by("sök_timestamp", "pk")
+        )
+        MigrationExecutor(connection).migrate(self.latest)
+
+        assert [track.country for track in tracks] == ["SE", "SE", "SE"]
+        assert tracks[0].visitor_hash == tracks[1].visitor_hash != tracks[2].visitor_hash
 
 
 class TestVisitorCountry:

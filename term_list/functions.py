@@ -29,7 +29,6 @@ def mäta_sök_träff(sök_term, sök_data, request):
     ny_sök = SearchTrack()
     ny_sök.sök_term = sök_term
     ny_sök.records_returned = str([i.get('begrepp_id') for i in sök_data])[1:-1]
-    ny_sök.ip_adress = besökare_ip_adress(request)
     ny_sök.save()
     return None
 
@@ -62,7 +61,6 @@ def mäta_förklaring_träff(sök_term, request):
 
     ny_sök = MetadataSearchTrack()
     ny_sök.sök_term = sök_term
-    ny_sök.ip_adress = besökare_ip_adress(request)
     ny_sök.visitor_hash = besökare_hash(request)
     ny_sök.country = besökare_land(request)
     ny_sök.save()

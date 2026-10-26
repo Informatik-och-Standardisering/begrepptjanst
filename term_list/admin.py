@@ -305,7 +305,7 @@ class ConceptCommentsAdmin(DictionaryRestrictedAdminMixin, admin.ModelAdmin):
 
 class MetadataSearchTrackAdmin(admin.ModelAdmin):
 
-    list_display = ("sök_term", "ip_adress", "sök_timestamp")
+    list_display = ("sök_term", "sök_timestamp")
     change_list_template = "admin/metadatasearchtrack_changelist.html"
 
     def has_add_permission(self, request):
@@ -379,7 +379,7 @@ class MetadataSearchTrackAdmin(admin.ModelAdmin):
 
 class SearchTrackAdmin(admin.ModelAdmin):
 
-    list_display = ("sök_term", "ip_adress", "sök_timestamp", "records_returned")
+    list_display = ("sök_term", "sök_timestamp", "records_returned")
 
     def has_add_permission(self, request):
         return False
