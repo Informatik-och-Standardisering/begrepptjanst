@@ -57,6 +57,26 @@
   </div>
 
   <div>
+    <h2>Visningar per land</h2>
+    <table>
+      <thead>
+        <tr><th>Land</th><th>Visningar</th></tr>
+      </thead>
+      <tbody>
+      {% for country, views in top_countries %}
+        <tr{% if forloop.counter > 10 %} class="extra-country" hidden{% endif %}><td>{{ country|default:"Okänt" }}</td><td>{{ views }}</td></tr>
+      {% empty %}
+        <tr><td colspan="2">Inga visningar under perioden.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% if top_countries|length > 10 %}
+    <button type="button" class="button" data-toggle-rows=".extra-country"
+            data-more="Visa alla ({{ top_countries|length }})" data-less="Visa färre">Visa alla ({{ top_countries|length }})</button>
+    {% endif %}
+  </div>
+
+  <div>
     <h2>Mest visade begrepp</h2>
     <table>
       <thead>
@@ -80,9 +100,11 @@
       </tbody>
     </table>
     {% if top_concepts|length > 10 %}
-    <button type="button" id="toggle-concepts" class="button"
+    <button type="button" class="button" data-toggle-rows=".extra-concept"
             data-more="Visa alla ({{ top_concepts|length }})" data-less="Visa färre">Visa alla ({{ top_concepts|length }})</button>
     {% endif %}
   </div>
 </div>
+
+<p class="help"><a href="https://db-ip.com">IP Geolocation by DB-IP</a></p>
 {% endblock %}

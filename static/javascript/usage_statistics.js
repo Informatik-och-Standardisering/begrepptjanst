@@ -70,15 +70,11 @@ if (chart_data_element) {
     window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render_charts);
 }
 
-const toggle_concepts_button = document.getElementById("toggle-concepts");
-
-if (toggle_concepts_button) {
-    toggle_concepts_button.addEventListener("click", () => {
-        const extra_rows = document.querySelectorAll(".extra-concept");
+document.querySelectorAll("[data-toggle-rows]").forEach((button) => {
+    button.addEventListener("click", () => {
+        const extra_rows = document.querySelectorAll(button.dataset.toggleRows);
         const expanding = extra_rows[0].hidden;
         extra_rows.forEach((row) => { row.hidden = !expanding; });
-        toggle_concepts_button.textContent = expanding
-            ? toggle_concepts_button.dataset.less
-            : toggle_concepts_button.dataset.more;
+        button.textContent = expanding ? button.dataset.less : button.dataset.more;
     });
-}
+});
