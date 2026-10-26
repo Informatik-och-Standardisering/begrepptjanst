@@ -5,7 +5,7 @@ django-crispy-forms==1.9.0
 django-debug-toolbar==4.1.0
 django-extensions==3.2.3
 django-simple-history==3.12.0
-setuptools==83.0.0
+setuptools==84.1.0
 mysql-connector-python==9.1.0
 xlsxwriter==3.2.0
 pandas==2.2.3
