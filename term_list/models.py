@@ -156,7 +156,6 @@ class SearchTrack(models.Model):
         app_label = 'term_list'
 
     sök_term = models.CharField(max_length=255)
-    ip_adress = models.GenericIPAddressField()
     sök_timestamp = models.DateTimeField(auto_now_add=True)
     records_returned = models.TextField()
 
@@ -174,11 +173,23 @@ class MetadataSearchTrack(models.Model):
         app_label = 'term_list'
 
     sök_term = models.CharField(max_length=255)
-    ip_adress = models.GenericIPAddressField()
     sök_timestamp = models.DateTimeField(auto_now_add=True)
+    visitor_hash = models.CharField(max_length=64, null=True, blank=True)
+    country = models.CharField(max_length=2, null=True, blank=True)
 
     def __str__(self):
         return self.sök_term
+
+class DailySalt(models.Model):
+
+    """Secret salt for the visitor hash, replaced every day.
+    """
+
+    class Meta:
+        app_label = 'term_list'
+
+    date = models.DateField(unique=True)
+    salt = models.CharField(max_length=64)
 
 class ConfigurationOptions(models.Model):
 

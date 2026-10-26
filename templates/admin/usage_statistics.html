@@ -1,0 +1,110 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{% block extrahead %}
+{{ block.super }}
+<script src="{% static 'javascript/chart.umd.min.js' %}"></script>
+<script src="{% static 'javascript/usage_statistics.js' %}" defer></script>
+<style>
+  :root { --chart-line: #2b78b0; --chart-line-2: #c4621d; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --chart-line: #3d8fd1; --chart-line-2: #d9772f; }
+  }
+  :root[data-theme="dark"] { --chart-line: #3d8fd1; --chart-line-2: #d9772f; }
+  .stats-filter { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; }
+  .stats-filter p { margin: 0; }
+  .stats-columns { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 32px; }
+  .stats-chart { position: relative; height: 180px; }
+</style>
+{% endblock %}
+{% block content %}
+<form method="get" class="stats-filter">
+  {{ form.as_p }}
+  <input type="submit" value="Visa">
+</form>
+
+{% if chart_data %}
+<p>
+  {% for value, label, url in interval_links %}
+    {% if value == interval %}<strong>{{ label }}</strong>{% else %}<a href="{{ url }}">{{ label }}</a>{% endif %}{% if not forloop.last %} | {% endif %}
+  {% endfor %}
+</p>
+<h2>Visningar</h2>
+<div class="stats-chart">
+  <canvas id="views-chart" role="img" aria-label="Visningar"></canvas>
+</div>
+<h2>Unika besökare per dag</h2>
+<div class="stats-chart">
+  <canvas id="visitors-chart" role="img" aria-label="Unika besökare per dag"></canvas>
+</div>
+{{ chart_data|json_script:"views-chart-data" }}
+{% endif %}
+
+<div class="stats-columns">
+  <div>
+    <h2>Mest visade ordböcker</h2>
+    <table>
+      <thead>
+        <tr><th>Ordbok</th><th>Visningar</th></tr>
+      </thead>
+      <tbody>
+      {% for row in top_dictionaries %}
+        <tr><td>{{ row.dictionary }}</td><td>{{ row.views }}</td></tr>
+      {% empty %}
+        <tr><td colspan="2">Inga visningar under perioden.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div>
+    <h2>Visningar per land</h2>
+    <table>
+      <thead>
+        <tr><th>Land</th><th>Visningar</th></tr>
+      </thead>
+      <tbody>
+      {% for country, views in top_countries %}
+        <tr{% if forloop.counter > 10 %} class="extra-country" hidden{% endif %}><td>{{ country|default:"Okänt" }}</td><td>{{ views }}</td></tr>
+      {% empty %}
+        <tr><td colspan="2">Inga visningar under perioden.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% if top_countries|length > 10 %}
+    <button type="button" class="button" data-toggle-rows=".extra-country"
+            data-more="Visa alla ({{ top_countries|length }})" data-less="Visa färre">Visa alla ({{ top_countries|length }})</button>
+    {% endif %}
+  </div>
+
+  <div>
+    <h2>Mest visade begrepp</h2>
+    <table>
+      <thead>
+        <tr><th>Begrepp</th><th>Visningar</th></tr>
+      </thead>
+      <tbody>
+      {% for row in top_concepts %}
+        <tr{% if forloop.counter > 10 %} class="extra-concept" hidden{% endif %}>
+          <td>
+            {% if row.concept %}
+              <a href="{% url 'admin:term_list_concept_change' row.concept.pk %}">{{ row.concept.term }}</a>
+            {% else %}
+              Okänt begrepp (id {{ row.concept_id }})
+            {% endif %}
+          </td>
+          <td>{{ row.views }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="2">Inga visningar under perioden.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% if top_concepts|length > 10 %}
+    <button type="button" class="button" data-toggle-rows=".extra-concept"
+            data-more="Visa alla ({{ top_concepts|length }})" data-less="Visa färre">Visa alla ({{ top_concepts|length }})</button>
+    {% endif %}
+  </div>
+</div>
+
+<p class="help"><a href="https://db-ip.com">IP Geolocation by DB-IP</a></p>
+{% endblock %}

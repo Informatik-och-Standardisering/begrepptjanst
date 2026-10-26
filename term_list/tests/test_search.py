@@ -218,15 +218,3 @@ class TestSearchTracking:
         concept.dictionaries.add(dictionary)
         search(client, "Spårat")
         assert SearchTrack.objects.filter(sök_term="Spårat").exists()
-
-    def test_search_track_prefers_x_forwarded_for_header(self, client, dictionary):
-        """The IP recorded for a search comes from X-Forwarded-For when present, not REMOTE_ADDR."""
-        concept = ConceptFactory(term="Ip")
-        concept.dictionaries.add(dictionary)
-        client.get(
-            "/",
-            {"q": "Ip"},
-            headers={**AJAX_HEADERS, "X-Forwarded-For": "203.0.113.9, 10.0.0.1"},
-        )
-        track = SearchTrack.objects.get(sök_term="Ip")
-        assert track.ip_adress == "203.0.113.9"
