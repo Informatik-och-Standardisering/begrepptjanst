@@ -1,11 +1,13 @@
+import hashlib
 import re
+import secrets
 from collections import Counter, OrderedDict
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.db.models import Count
 from django.db.models.functions import TruncDate, TruncDay, TruncMonth, TruncWeek
 
-from .models import Concept, Dictionary, MetadataSearchTrack, SearchTrack
+from .models import Concept, DailySalt, Dictionary, MetadataSearchTrack, SearchTrack
 
 
 def besökare_ip_adress(request):
@@ -28,11 +30,24 @@ def mäta_sök_träff(sök_term, sök_data, request):
     ny_sök.save()
     return None
 
+def besökare_hash(request):
+    """Return a hash that identifies the visitor for today only."""
+
+    today = date.today()
+    daily_salt, created = DailySalt.objects.get_or_create(
+        date=today, defaults={'salt': secrets.token_hex(32)}
+    )
+    if created:
+        DailySalt.objects.exclude(date=today).delete()
+    visitor = besökare_ip_adress(request) + request.META.get('HTTP_USER_AGENT', '') + daily_salt.salt
+    return hashlib.sha256(visitor.encode()).hexdigest()
+
 def mäta_förklaring_träff(sök_term, request):
 
     ny_sök = MetadataSearchTrack()
     ny_sök.sök_term = sök_term
     ny_sök.ip_adress = besökare_ip_adress(request)
+    ny_sök.visitor_hash = besökare_hash(request)
     ny_sök.save()
 
 def most_viewed_concepts(from_date, to_date, limit=50):
@@ -79,11 +94,15 @@ def interval_choices(from_date, to_date):
         return 'week', ['day', 'week', 'month']
     return 'month', ['week', 'month']
 
-def _period_starts(from_date, to_date, interval):
+def _period_start(day, interval):
     if interval == 'month':
-        start = from_date.replace(day=1)
-    else:
-        start = from_date - timedelta(days=from_date.weekday() if interval == 'week' else 0)
+        return day.replace(day=1)
+    if interval == 'week':
+        return day - timedelta(days=day.weekday())
+    return day
+
+def _period_starts(from_date, to_date, interval):
+    start = _period_start(from_date, interval)
     while start <= to_date:
         yield start
         if interval == 'month':
@@ -101,6 +120,24 @@ def views_over_time(from_date, to_date, interval):
         .annotate(views=Count('id'))
     )
     return [(start, counts.get(start, 0)) for start in _period_starts(from_date, to_date, interval)]
+
+def visitors_over_time(from_date, to_date, interval):
+    """Return (period start, average unique visitors per day) for every period in the range."""
+
+    daily_visitors = dict(
+        MetadataSearchTrack.objects.filter(sök_timestamp__date__range=(from_date, to_date))
+        .annotate(day=TruncDate('sök_timestamp'))
+        .values_list('day')
+        .annotate(visitors=Count('visitor_hash', distinct=True))
+    )
+    totals, days = Counter(), Counter()
+    day = from_date
+    while day <= to_date:
+        start = _period_start(day, interval)
+        totals[start] += daily_visitors.get(day, 0)
+        days[start] += 1
+        day += timedelta(days=1)
+    return [(start, round(totals[start] / days[start], 1)) for start in days]
 
 def sort_concept_keys(begrepp_dict):
 

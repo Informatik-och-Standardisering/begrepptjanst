@@ -50,6 +50,7 @@ from term_list.functions import (
     most_viewed_concepts,
     most_viewed_dictionaries,
     views_over_time,
+    visitors_over_time,
 )
 from term_list.models import (
     STATUS_CHOICES,
@@ -329,7 +330,7 @@ class MetadataSearchTrackAdmin(admin.ModelAdmin):
         form = StatisticsFilterForm(
             request.GET or {"from_date": today - timedelta(days=30), "to_date": today}
         )
-        top_concepts = top_dictionaries = interval_links = chart_rows = []
+        top_concepts = top_dictionaries = interval_links = []
         chart_data = interval = None
         if form.is_valid():
             from_date, to_date = form.cleaned_data["from_date"], form.cleaned_data["to_date"]
@@ -352,9 +353,14 @@ class MetadataSearchTrackAdmin(admin.ModelAdmin):
                 for start, _ in periods
             ]
             titles = [f"Vecka från {label}" if interval == "week" else label for label in labels]
-            views = [count for _, count in periods]
-            chart_data = {"labels": labels, "titles": titles, "views": views}
-            chart_rows = list(zip(titles, views))
+            chart_data = {
+                "labels": labels,
+                "titles": titles,
+                "views": [views for _, views in periods],
+                "visitors": [
+                    visitors for _, visitors in visitors_over_time(from_date, to_date, interval)
+                ],
+            }
         context = {
             **self.admin_site.each_context(request),
             "title": "Användningsstatistik",
@@ -364,7 +370,6 @@ class MetadataSearchTrackAdmin(admin.ModelAdmin):
             "interval": interval,
             "interval_links": interval_links,
             "chart_data": chart_data,
-            "chart_rows": chart_rows,
         }
         return TemplateResponse(request, "admin/usage_statistics.html", context)
 

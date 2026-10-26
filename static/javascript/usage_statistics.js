@@ -2,31 +2,30 @@ const chart_data_element = document.getElementById("views-chart-data");
 
 if (chart_data_element) {
     const chart_data = JSON.parse(chart_data_element.textContent);
-    const canvas = document.getElementById("views-chart");
-    let chart = null;
+    const series = [
+        { canvas_id: "views-chart", label: "Visningar", data: chart_data.views, color: "--chart-line" },
+        { canvas_id: "visitors-chart", label: "Unika besökare per dag", data: chart_data.visitors, color: "--chart-line-2" },
+    ];
+    let charts = [];
 
     function css_variable(name) {
-        return getComputedStyle(canvas).getPropertyValue(name).trim();
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     }
 
-    function render_chart() {
-        if (chart) {
-            chart.destroy();
-        }
-        const line_color = css_variable("--chart-line");
+    function line_chart(canvas, label, data, color) {
         const text_color = css_variable("--body-quiet-color");
 
-        chart = new Chart(canvas, {
+        return new Chart(canvas, {
             type: "line",
             data: {
                 labels: chart_data.labels,
                 datasets: [{
-                    label: "Visningar",
-                    data: chart_data.views,
-                    borderColor: line_color,
-                    backgroundColor: line_color,
+                    label: label,
+                    data: data,
+                    borderColor: color,
+                    backgroundColor: color,
                     borderWidth: 2,
-                    pointRadius: chart_data.views.length === 1 ? 4 : 0,
+                    pointRadius: data.length === 1 ? 4 : 0,
                     pointHoverRadius: 5,
                 }],
             },
@@ -46,19 +45,40 @@ if (chart_data_element) {
                         ticks: { color: text_color, maxTicksLimit: 10, maxRotation: 0 },
                     },
                     y: {
+                        afterFit: (axis) => { axis.width = 48; },
                         beginAtZero: true,
                         grid: { color: css_variable("--hairline-color") },
-                        ticks: { color: text_color, precision: 0 },
+                        ticks: { color: text_color, precision: 0, maxTicksLimit: 5 },
                     },
                 },
             },
         });
     }
 
-    render_chart();
-    new MutationObserver(render_chart).observe(document.documentElement, {
+    function render_charts() {
+        charts.forEach((chart) => chart.destroy());
+        charts = series.map((item) => line_chart(
+            document.getElementById(item.canvas_id), item.label, item.data, css_variable(item.color)
+        ));
+    }
+
+    render_charts();
+    new MutationObserver(render_charts).observe(document.documentElement, {
         attributes: true,
         attributeFilter: ["data-theme"],
     });
-    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render_chart);
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render_charts);
+}
+
+const toggle_concepts_button = document.getElementById("toggle-concepts");
+
+if (toggle_concepts_button) {
+    toggle_concepts_button.addEventListener("click", () => {
+        const extra_rows = document.querySelectorAll(".extra-concept");
+        const expanding = extra_rows[0].hidden;
+        extra_rows.forEach((row) => { row.hidden = !expanding; });
+        toggle_concepts_button.textContent = expanding
+            ? toggle_concepts_button.dataset.less
+            : toggle_concepts_button.dataset.more;
+    });
 }
