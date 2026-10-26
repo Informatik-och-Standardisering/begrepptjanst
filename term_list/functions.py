@@ -1,7 +1,9 @@
 import re
 from collections import Counter, OrderedDict
+from datetime import timedelta
 
 from django.db.models import Count
+from django.db.models.functions import TruncDate, TruncDay, TruncMonth, TruncWeek
 
 from .models import Concept, Dictionary, MetadataSearchTrack, SearchTrack
 
@@ -64,6 +66,41 @@ def most_viewed_dictionaries(from_date, to_date):
         totals[dictionary_id] += view_counts[str(concept_id)]
     dictionaries = Dictionary.objects.in_bulk(list(totals))
     return [{'dictionary': dictionaries[pk], 'views': views} for pk, views in totals.most_common()]
+
+TRUNCATE = {'day': TruncDay, 'week': TruncWeek, 'month': TruncMonth}
+
+def interval_choices(from_date, to_date):
+    """Return the default interval and the intervals allowed for the range length."""
+
+    days = (to_date - from_date).days + 1
+    if days <= 90:
+        return 'day', ['day', 'week']
+    if days <= 730:
+        return 'week', ['day', 'week', 'month']
+    return 'month', ['week', 'month']
+
+def _period_starts(from_date, to_date, interval):
+    if interval == 'month':
+        start = from_date.replace(day=1)
+    else:
+        start = from_date - timedelta(days=from_date.weekday() if interval == 'week' else 0)
+    while start <= to_date:
+        yield start
+        if interval == 'month':
+            start = (start + timedelta(days=32)).replace(day=1)
+        else:
+            start += timedelta(days=7 if interval == 'week' else 1)
+
+def views_over_time(from_date, to_date, interval):
+    """Return (period start, views) for every period in the range, including periods without views."""
+
+    counts = dict(
+        MetadataSearchTrack.objects.filter(sök_timestamp__date__range=(from_date, to_date))
+        .annotate(period=TRUNCATE[interval](TruncDate('sök_timestamp')))
+        .values_list('period')
+        .annotate(views=Count('id'))
+    )
+    return [(start, counts.get(start, 0)) for start in _period_starts(from_date, to_date, interval)]
 
 def sort_concept_keys(begrepp_dict):
 

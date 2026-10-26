@@ -1,9 +1,62 @@
 {% extends "admin/base_site.html" %}
+{% load static %}
+{% block extrahead %}
+{{ block.super }}
+<script src="{% static 'javascript/chart.umd.min.js' %}"></script>
+<script src="{% static 'javascript/usage_statistics.js' %}" defer></script>
+<style>
+  :root { --chart-line: #2b78b0; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --chart-line: #3d8fd1; }
+  }
+  :root[data-theme="dark"] { --chart-line: #3d8fd1; }
+</style>
+{% endblock %}
 {% block content %}
 <form method="get">
   {{ form.as_p }}
   <input type="submit" value="Visa">
 </form>
+
+{% if chart_data %}
+<h2>Visningar över tid</h2>
+<p>
+  {% for value, label, url in interval_links %}
+    {% if value == interval %}<strong>{{ label }}</strong>{% else %}<a href="{{ url }}">{{ label }}</a>{% endif %}{% if not forloop.last %} | {% endif %}
+  {% endfor %}
+</p>
+<div style="position: relative; height: 300px;">
+  <canvas id="views-chart" role="img" aria-label="Visningar över tid"></canvas>
+</div>
+{{ chart_data|json_script:"views-chart-data" }}
+<details>
+  <summary>Visa som tabell</summary>
+  <table>
+    <thead>
+      <tr><th>Period</th><th>Visningar</th></tr>
+    </thead>
+    <tbody>
+    {% for title, views in chart_rows %}
+      <tr><td>{{ title }}</td><td>{{ views }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</details>
+{% endif %}
+
+<h2>Mest visade ordböcker</h2>
+<table>
+  <thead>
+    <tr><th>Ordbok</th><th>Visningar</th></tr>
+  </thead>
+  <tbody>
+  {% for row in top_dictionaries %}
+    <tr><td>{{ row.dictionary }}</td><td>{{ row.views }}</td></tr>
+  {% empty %}
+    <tr><td colspan="2">Inga visningar under perioden.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
 
 <h2>Mest visade begrepp</h2>
 <table>

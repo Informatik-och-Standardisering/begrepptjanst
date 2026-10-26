@@ -2,6 +2,7 @@ import json
 import logging
 from datetime import date, timedelta
 from typing import Any, ClassVar, Type, cast
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.contrib import admin
@@ -44,7 +45,12 @@ from term_list.forms import (
     StatisticsFilterForm,
     SynonymInlineForm,
 )
-from term_list.functions import most_viewed_concepts, most_viewed_dictionaries
+from term_list.functions import (
+    interval_choices,
+    most_viewed_concepts,
+    most_viewed_dictionaries,
+    views_over_time,
+)
 from term_list.models import (
     STATUS_CHOICES,
     Attribute,
@@ -323,17 +329,42 @@ class MetadataSearchTrackAdmin(admin.ModelAdmin):
         form = StatisticsFilterForm(
             request.GET or {"from_date": today - timedelta(days=30), "to_date": today}
         )
-        top_concepts = top_dictionaries = []
+        top_concepts = top_dictionaries = interval_links = chart_rows = []
+        chart_data = interval = None
         if form.is_valid():
-            date_range = (form.cleaned_data["from_date"], form.cleaned_data["to_date"])
-            top_concepts = most_viewed_concepts(*date_range)
-            top_dictionaries = most_viewed_dictionaries(*date_range)
+            from_date, to_date = form.cleaned_data["from_date"], form.cleaned_data["to_date"]
+            top_concepts = most_viewed_concepts(from_date, to_date)
+            top_dictionaries = most_viewed_dictionaries(from_date, to_date)
+
+            default_interval, allowed_intervals = interval_choices(from_date, to_date)
+            interval = form.cleaned_data["interval"]
+            if interval not in allowed_intervals:
+                interval = default_interval
+            interval_links = [
+                (value, label, "?" + urlencode({"from_date": from_date, "to_date": to_date, "interval": value}))
+                for value, label in StatisticsFilterForm.INTERVAL_CHOICES
+                if value in allowed_intervals
+            ]
+
+            periods = views_over_time(from_date, to_date, interval)
+            labels = [
+                start.strftime("%Y-%m") if interval == "month" else start.isoformat()
+                for start, _ in periods
+            ]
+            titles = [f"Vecka från {label}" if interval == "week" else label for label in labels]
+            views = [count for _, count in periods]
+            chart_data = {"labels": labels, "titles": titles, "views": views}
+            chart_rows = list(zip(titles, views))
         context = {
             **self.admin_site.each_context(request),
             "title": "Användningsstatistik",
             "form": form,
             "top_concepts": top_concepts,
             "top_dictionaries": top_dictionaries,
+            "interval": interval,
+            "interval_links": interval_links,
+            "chart_data": chart_data,
+            "chart_rows": chart_rows,
         }
         return TemplateResponse(request, "admin/usage_statistics.html", context)
 

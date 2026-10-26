@@ -485,8 +485,11 @@ class ChooseExportAttributes(forms.Form):
 
 class StatisticsFilterForm(forms.Form):
 
+    INTERVAL_CHOICES = [("day", "Dag"), ("week", "Vecka"), ("month", "Månad")]
+
     from_date = forms.DateField(label="Från", widget=CustomDateInput(format="%Y-%m-%d"))
     to_date = forms.DateField(label="Till", widget=CustomDateInput(format="%Y-%m-%d"))
+    interval = forms.ChoiceField(choices=INTERVAL_CHOICES, required=False, widget=HiddenInput)
 
     def clean(self):
         cleaned_data = super().clean()
