@@ -1,10 +1,13 @@
+import functools
 import hashlib
 import re
 import secrets
 from collections import Counter, OrderedDict
 from datetime import date, timedelta
+from pathlib import Path
 
-from django.db.models import Count
+import maxminddb
+from django.db.models import Count, F
 from django.db.models.functions import TruncDate, TruncDay, TruncMonth, TruncWeek
 
 from .models import Concept, DailySalt, Dictionary, MetadataSearchTrack, SearchTrack
@@ -42,12 +45,26 @@ def besökare_hash(request):
     visitor = besökare_ip_adress(request) + request.META.get('HTTP_USER_AGENT', '') + daily_salt.salt
     return hashlib.sha256(visitor.encode()).hexdigest()
 
+@functools.cache
+def _country_reader():
+    return maxminddb.open_database(Path(__file__).resolve().parent.parent / 'geoip' / 'dbip-country-lite.mmdb')
+
+def besökare_land(request):
+    """Return the visitor's two-letter country code, or None when it's unknown."""
+
+    try:
+        record = _country_reader().get(besökare_ip_adress(request))
+    except ValueError:
+        return None
+    return record['country']['iso_code'] if record else None
+
 def mäta_förklaring_träff(sök_term, request):
 
     ny_sök = MetadataSearchTrack()
     ny_sök.sök_term = sök_term
     ny_sök.ip_adress = besökare_ip_adress(request)
     ny_sök.visitor_hash = besökare_hash(request)
+    ny_sök.country = besökare_land(request)
     ny_sök.save()
 
 def most_viewed_concepts(from_date, to_date, limit=50):
@@ -81,6 +98,16 @@ def most_viewed_dictionaries(from_date, to_date):
         totals[dictionary_id] += view_counts[str(concept_id)]
     dictionaries = Dictionary.objects.in_bulk(list(totals))
     return [{'dictionary': dictionaries[pk], 'views': views} for pk, views in totals.most_common()]
+
+def views_per_country(from_date, to_date):
+    """Return (country code or None, views) between two dates (inclusive), most views first."""
+
+    return list(
+        MetadataSearchTrack.objects.filter(sök_timestamp__date__range=(from_date, to_date))
+        .values_list('country')
+        .annotate(views=Count('id'))
+        .order_by('-views', F('country').asc(nulls_last=True))
+    )
 
 TRUNCATE = {'day': TruncDay, 'week': TruncWeek, 'month': TruncMonth}
 

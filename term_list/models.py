@@ -177,6 +177,7 @@ class MetadataSearchTrack(models.Model):
     ip_adress = models.GenericIPAddressField()
     sök_timestamp = models.DateTimeField(auto_now_add=True)
     visitor_hash = models.CharField(max_length=64, null=True, blank=True)
+    country = models.CharField(max_length=2, null=True, blank=True)
 
     def __str__(self):
         return self.sök_term

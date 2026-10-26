@@ -9,9 +9,11 @@ from django.urls import reverse
 
 from term_list.functions import (
     besökare_hash,
+    besökare_land,
     most_viewed_concepts,
     most_viewed_dictionaries,
     views_over_time,
+    views_per_country,
     visitors_over_time,
 )
 from term_list.models import DailySalt, MetadataSearchTrack
@@ -20,9 +22,9 @@ from term_list.tests.factories import ConceptFactory, DictionaryFactory
 pytestmark = pytest.mark.django_db
 
 
-def log_view(concept_id, timestamp, visitor_hash=None):
+def log_view(concept_id, timestamp, visitor_hash=None, country=None):
     track = MetadataSearchTrack.objects.create(
-        sök_term=str(concept_id), ip_adress="127.0.0.1", visitor_hash=visitor_hash
+        sök_term=str(concept_id), ip_adress="127.0.0.1", visitor_hash=visitor_hash, country=country
     )
     MetadataSearchTrack.objects.filter(pk=track.pk).update(sök_timestamp=timestamp)
 
@@ -59,6 +61,34 @@ class TestVisitorHash:
 
         track = MetadataSearchTrack.objects.get(sök_term=str(concept.id))
         assert len(track.visitor_hash) == 64
+
+
+class TestVisitorCountry:
+    def test_known_ip_gives_its_country(self):
+        """An IP in a Swedish range is looked up as SE."""
+        assert besökare_land(visitor_request(ip="195.67.0.1")) == "SE"
+
+    def test_local_ip_gives_no_country(self):
+        """A local address has no country."""
+        assert besökare_land(visitor_request(ip="127.0.0.1")) is None
+
+    def test_invalid_ip_gives_no_country(self):
+        """A malformed forwarded address doesn't crash the lookup."""
+        request = visitor_request()
+        request.META["HTTP_X_FORWARDED_FOR"] = "not-an-ip"
+
+        assert besökare_land(request) is None
+
+    def test_views_per_country_most_first(self, concept):
+        """Views are counted per country, with unknown countries as None."""
+        log_view(concept.id, datetime(2026, 10, 1, 9, 0), country="SE")
+        log_view(concept.id, datetime(2026, 10, 1, 10, 0), country="SE")
+        log_view(concept.id, datetime(2026, 10, 1, 11, 0), country="NO")
+        log_view(concept.id, datetime(2026, 10, 1, 12, 0))
+
+        result = views_per_country(date(2026, 10, 1), date(2026, 10, 1))
+
+        assert result == [("SE", 2), ("NO", 1), (None, 1)]
 
 
 class TestMostViewedConcepts:

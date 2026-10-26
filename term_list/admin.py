@@ -50,6 +50,7 @@ from term_list.functions import (
     most_viewed_concepts,
     most_viewed_dictionaries,
     views_over_time,
+    views_per_country,
     visitors_over_time,
 )
 from term_list.models import (
@@ -330,12 +331,13 @@ class MetadataSearchTrackAdmin(admin.ModelAdmin):
         form = StatisticsFilterForm(
             request.GET or {"from_date": today - timedelta(days=30), "to_date": today}
         )
-        top_concepts = top_dictionaries = interval_links = []
+        top_concepts = top_dictionaries = top_countries = interval_links = []
         chart_data = interval = None
         if form.is_valid():
             from_date, to_date = form.cleaned_data["from_date"], form.cleaned_data["to_date"]
             top_concepts = most_viewed_concepts(from_date, to_date)
             top_dictionaries = most_viewed_dictionaries(from_date, to_date)
+            top_countries = views_per_country(from_date, to_date)
 
             default_interval, allowed_intervals = interval_choices(from_date, to_date)
             interval = form.cleaned_data["interval"]
@@ -367,6 +369,7 @@ class MetadataSearchTrackAdmin(admin.ModelAdmin):
             "form": form,
             "top_concepts": top_concepts,
             "top_dictionaries": top_dictionaries,
+            "top_countries": top_countries,
             "interval": interval,
             "interval_links": interval_links,
             "chart_data": chart_data,
