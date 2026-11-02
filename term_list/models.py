@@ -261,6 +261,9 @@ class GroupAttribute(models.Model):
         verbose_name_plural = _("Attribut Grupper")
 
         ordering = ['position', 'attribute__name']
+        constraints = [
+            models.UniqueConstraint(fields=['group', 'position'], name='unique_position_per_group'),
+        ]
 
     group = models.ForeignKey(Group, on_delete=models.CASCADE)
     attribute = models.ForeignKey('Attribute', on_delete=models.CASCADE)
