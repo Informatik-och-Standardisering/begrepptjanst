@@ -28,6 +28,7 @@ from term_list.functions import (
     Xlator,
     mäta_förklaring_träff,
     mäta_sök_träff,
+    mäta_unikt_besök,
     replace_nbs_with_normal_space,
 )
 from term_list.models import (
@@ -792,6 +793,7 @@ def main_search_view(request: HttpRequest) -> HttpResponse | JsonResponse:
 
     else:
         logger.debug("Search not ajax, or no search term")
+        mäta_unikt_besök(request)
         concept = Concept.objects.none()
 
     html = render_to_string("term_list/term.html", context={"concept": concept})
