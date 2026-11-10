@@ -49,9 +49,9 @@ from term_list.functions import (
     interval_choices,
     most_viewed_concepts,
     most_viewed_dictionaries,
+    unique_visits_over_time,
     views_over_time,
     views_per_country,
-    visitors_over_time,
 )
 from term_list.models import (
     STATUS_CHOICES,
@@ -359,8 +359,8 @@ class MetadataSearchTrackAdmin(admin.ModelAdmin):
                 "labels": labels,
                 "titles": titles,
                 "views": [views for _, views in periods],
-                "visitors": [
-                    visitors for _, visitors in visitors_over_time(from_date, to_date, interval)
+                "unique_visits": [
+                    visits for _, visits in unique_visits_over_time(from_date, to_date, interval)
                 ],
             }
         context = {
