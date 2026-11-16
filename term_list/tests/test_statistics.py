@@ -15,14 +15,17 @@ from term_list.functions import (
     besökare_land,
     most_viewed_concepts,
     most_viewed_dictionaries,
+    mäta_unikt_besök,
+    unique_visits_over_time,
     views_over_time,
     views_per_country,
-    visitors_over_time,
 )
-from term_list.models import DailySalt, MetadataSearchTrack
+from term_list.models import DailySalt, MetadataSearchTrack, UniqueVisit
 from term_list.tests.factories import ConceptFactory, DictionaryFactory
 
 pytestmark = pytest.mark.django_db
+
+AJAX_HEADERS = {"X-Custom-Requested-With": "XMLHttpRequest"}
 
 
 def log_view(concept_id, timestamp, visitor_hash=None, country=None):
@@ -202,29 +205,93 @@ class TestViewsOverTime:
         assert result == [(date(2026, 12, 1), 1), (date(2027, 1, 1), 1)]
 
 
-class TestVisitorsOverTime:
-    def setup_visits(self, concept):
-        log_view(concept.id, datetime(2026, 9, 28, 9, 0), visitor_hash="a")
-        log_view(concept.id, datetime(2026, 9, 28, 10, 0), visitor_hash="b")
-        log_view(concept.id, datetime(2026, 9, 29, 9, 0), visitor_hash="a")
-        log_view(concept.id, datetime(2026, 9, 29, 10, 0), visitor_hash="a")
-        log_view(concept.id, datetime(2026, 9, 29, 11, 0))
+class TestRecordUniqueVisit:
+    def test_first_request_today_records_one_visit(self):
+        """A visitor's first request today stores today's date and their hash."""
+        request = visitor_request()
 
-    def test_daily_unique_visitors_ignore_views_without_hash(self, concept):
-        """Each hash counts once per day; views without a hash don't count as visitors."""
-        self.setup_visits(concept)
+        mäta_unikt_besök(request)
 
-        result = visitors_over_time(date(2026, 9, 28), date(2026, 9, 30), "day")
+        visit = UniqueVisit.objects.get()
+        assert (visit.date, visit.visitor_hash) == (date.today(), besökare_hash(request))
 
-        assert result == [(date(2026, 9, 28), 2), (date(2026, 9, 29), 1), (date(2026, 9, 30), 0)]
+    def test_same_visitor_same_day_counts_once(self):
+        """Repeated requests from one visitor on the same day give a single row."""
+        mäta_unikt_besök(visitor_request())
+        mäta_unikt_besök(visitor_request())
 
-    def test_weekly_value_is_average_of_daily_unique_visitors(self, concept):
-        """A week shows the daily unique visitors averaged over its days, not a summed total."""
-        self.setup_visits(concept)
+        assert UniqueVisit.objects.count() == 1
 
-        result = visitors_over_time(date(2026, 9, 28), date(2026, 10, 4), "week")
+    def test_same_visitor_next_day_counts_again(self):
+        """The same visitor on a new day is a new unique visit."""
+        mäta_unikt_besök(visitor_request())
+        yesterday = date.today() - timedelta(days=1)
+        UniqueVisit.objects.update(date=yesterday)
+        DailySalt.objects.update(date=yesterday)
 
-        assert result == [(date(2026, 9, 28), 0.4)]
+        mäta_unikt_besök(visitor_request())
+
+        assert sorted(UniqueVisit.objects.values_list("date", flat=True)) == [yesterday, date.today()]
+
+    def test_different_visitors_same_day_count_separately(self):
+        """Two visitors on the same day give two rows."""
+        mäta_unikt_besök(visitor_request())
+        mäta_unikt_besök(visitor_request(ip="192.0.2.2"))
+
+        assert UniqueVisit.objects.count() == 2
+
+    @pytest.mark.parametrize("user_agent", ["Googlebot/2.1", "YandexBot", "SomeCrawler", "Baiduspider", ""])
+    def test_bots_and_missing_user_agent_are_skipped(self, user_agent):
+        """Requests from bots, crawlers, spiders or without a user agent aren't counted."""
+        mäta_unikt_besök(visitor_request(user_agent=user_agent))
+
+        assert not UniqueVisit.objects.exists()
+
+
+class TestPageLoadRecordsVisit:
+    def test_loading_the_main_page_records_a_visit(self, client):
+        """A normal load of the main page counts as a unique visit."""
+        client.get("/", HTTP_USER_AGENT="Mozilla/5.0 Firefox")
+
+        assert UniqueVisit.objects.count() == 1
+
+    def test_ajax_search_records_no_visit(self, client):
+        """A search from the page doesn't count as a visit."""
+        client.get("/", {"q": "vård"}, headers=AJAX_HEADERS, HTTP_USER_AGENT="Mozilla/5.0 Firefox")
+
+        assert not UniqueVisit.objects.exists()
+
+
+class TestUniqueVisitsOverTime:
+    def test_days_without_visits_are_zero(self):
+        """Every day in the range is returned, with 0 for days without visits; visits outside don't count."""
+        UniqueVisit.objects.create(date=date(2026, 10, 1), visitor_hash="a")
+        UniqueVisit.objects.create(date=date(2026, 10, 1), visitor_hash="b")
+        UniqueVisit.objects.create(date=date(2026, 10, 3), visitor_hash="a")
+        UniqueVisit.objects.create(date=date(2026, 10, 4), visitor_hash="a")
+
+        result = unique_visits_over_time(date(2026, 10, 1), date(2026, 10, 3), "day")
+
+        assert result == [(date(2026, 10, 1), 2), (date(2026, 10, 2), 0), (date(2026, 10, 3), 1)]
+
+    def test_weeks_start_on_monday(self):
+        """Weekly periods start on Monday and sum the visits in the week."""
+        UniqueVisit.objects.create(date=date(2026, 10, 1), visitor_hash="a")
+        UniqueVisit.objects.create(date=date(2026, 10, 2), visitor_hash="a")
+        UniqueVisit.objects.create(date=date(2026, 10, 5), visitor_hash="a")
+
+        result = unique_visits_over_time(date(2026, 10, 1), date(2026, 10, 7), "week")
+
+        assert result == [(date(2026, 9, 28), 2), (date(2026, 10, 5), 1)]
+
+    def test_months_start_on_the_first(self):
+        """Monthly periods start on the first of the month, across a year boundary."""
+        UniqueVisit.objects.create(date=date(2026, 12, 15), visitor_hash="a")
+        UniqueVisit.objects.create(date=date(2027, 1, 20), visitor_hash="a")
+
+        result = unique_visits_over_time(date(2026, 12, 10), date(2027, 1, 31), "month")
+
+        assert result == [(date(2026, 12, 1), 1), (date(2027, 1, 1), 1)]
 
 
 class TestStatisticsView:
@@ -254,15 +321,16 @@ class TestStatisticsView:
         assert dictionary.dictionary_name in response.content.decode()
 
     def test_page_contains_chart_data(self, admin_user_authenticated_client, concept):
-        """The statistics page embeds the views over time for the chart."""
-        log_view(concept.id, datetime(2026, 10, 1, 12, 0), visitor_hash="a")
+        """The statistics page embeds the views and unique visits over time for the charts."""
+        log_view(concept.id, datetime(2026, 10, 1, 12, 0))
+        UniqueVisit.objects.create(date=date(2026, 10, 1), visitor_hash="a")
 
         response = admin_user_authenticated_client.get(
             self.url, {"from_date": "2026-10-01", "to_date": "2026-10-02"}
         )
 
         assert response.context["chart_data"]["views"] == [1, 0]
-        assert response.context["chart_data"]["visitors"] == [1, 0]
+        assert response.context["chart_data"]["unique_visits"] == [1, 0]
         assert 'id="views-chart-data"' in response.content.decode()
 
     def test_interval_not_allowed_for_range_falls_back_to_default(

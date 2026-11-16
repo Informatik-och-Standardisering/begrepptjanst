@@ -28,13 +28,13 @@
     {% if value == interval %}<strong>{{ label }}</strong>{% else %}<a href="{{ url }}">{{ label }}</a>{% endif %}{% if not forloop.last %} | {% endif %}
   {% endfor %}
 </p>
-<h2>Visningar</h2>
+<h2>Unika besök</h2>
 <div class="stats-chart">
-  <canvas id="views-chart" role="img" aria-label="Visningar"></canvas>
+  <canvas id="visits-chart" role="img" aria-label="Unika besök"></canvas>
 </div>
-<h2>Unika besökare per dag</h2>
+<h2>Begreppsvisningar</h2>
 <div class="stats-chart">
-  <canvas id="visitors-chart" role="img" aria-label="Unika besökare per dag"></canvas>
+  <canvas id="views-chart" role="img" aria-label="Begreppsvisningar"></canvas>
 </div>
 {{ chart_data|json_script:"views-chart-data" }}
 {% endif %}
