@@ -10,7 +10,7 @@ import maxminddb
 from django.db.models import Count, F
 from django.db.models.functions import TruncDate, TruncDay, TruncMonth, TruncWeek
 
-from .models import Concept, DailySalt, Dictionary, MetadataSearchTrack, SearchTrack
+from .models import Concept, DailySalt, Dictionary, MetadataSearchTrack, SearchTrack, UniqueVisit
 
 
 def besökare_ip_adress(request):
@@ -64,6 +64,16 @@ def mäta_förklaring_träff(sök_term, request):
     ny_sök.visitor_hash = besökare_hash(request)
     ny_sök.country = besökare_land(request)
     ny_sök.save()
+
+BOT_MARKERS = ('bot', 'crawler', 'spider')
+
+def mäta_unikt_besök(request):
+    """Record today's visit for this visitor once; skip bots and requests without a user agent."""
+
+    user_agent = request.META.get('HTTP_USER_AGENT', '').lower()
+    if not user_agent or any(marker in user_agent for marker in BOT_MARKERS):
+        return
+    UniqueVisit.objects.get_or_create(date=date.today(), visitor_hash=besökare_hash(request))
 
 def most_viewed_concepts(from_date, to_date, limit=50):
     """Return the most viewed concepts between two dates (inclusive) with view counts."""
@@ -146,23 +156,16 @@ def views_over_time(from_date, to_date, interval):
     )
     return [(start, counts.get(start, 0)) for start in _period_starts(from_date, to_date, interval)]
 
-def visitors_over_time(from_date, to_date, interval):
-    """Return (period start, average unique visitors per day) for every period in the range."""
+def unique_visits_over_time(from_date, to_date, interval):
+    """Return (period start, unique visits) for every period in the range, including periods without visits."""
 
-    daily_visitors = dict(
-        MetadataSearchTrack.objects.filter(sök_timestamp__date__range=(from_date, to_date))
-        .annotate(day=TruncDate('sök_timestamp'))
-        .values_list('day')
-        .annotate(visitors=Count('visitor_hash', distinct=True))
+    counts = dict(
+        UniqueVisit.objects.filter(date__range=(from_date, to_date))
+        .annotate(period=TRUNCATE[interval]('date'))
+        .values_list('period')
+        .annotate(visits=Count('id'))
     )
-    totals, days = Counter(), Counter()
-    day = from_date
-    while day <= to_date:
-        start = _period_start(day, interval)
-        totals[start] += daily_visitors.get(day, 0)
-        days[start] += 1
-        day += timedelta(days=1)
-    return [(start, round(totals[start] / days[start], 1)) for start in days]
+    return [(start, counts.get(start, 0)) for start in _period_starts(from_date, to_date, interval)]
 
 def sort_concept_keys(begrepp_dict):
 

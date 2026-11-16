@@ -191,6 +191,20 @@ class DailySalt(models.Model):
     date = models.DateField(unique=True)
     salt = models.CharField(max_length=64)
 
+class UniqueVisit(models.Model):
+
+    """One row per visitor per day that loaded the main page.
+    """
+
+    class Meta:
+        app_label = 'term_list'
+        constraints = [
+            models.UniqueConstraint(fields=['date', 'visitor_hash'], name='unique_visit_per_day'),
+        ]
+
+    date = models.DateField()
+    visitor_hash = models.CharField(max_length=64)
+
 class ConfigurationOptions(models.Model):
 
     class Meta:
